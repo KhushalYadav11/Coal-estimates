@@ -1,73 +1,49 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { ProjectCard } from "@/components/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { useLocation } from "wouter";
+import { getProjects, getProjectStats, createProject } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Projects() {
   const [, setLocation] = useLocation();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const { toast } = useToast();
 
-  //todo: remove mock functionality - replace with real data
-  const allProjects = [
-    {
-      id: "1",
-      name: "South Stockpile Assessment",
-      status: "completed" as const,
-      measurements: 48,
-      lastUpdated: "2 hours ago",
-      volume: 1245.8,
-      weight: 1619.54,
-    },
-    {
-      id: "2",
-      name: "North Yard Inventory",
-      status: "processing" as const,
-      measurements: 32,
-      lastUpdated: "1 day ago",
-      volume: 892.3,
-      weight: 1160,
-    },
-    {
-      id: "3",
-      name: "East Terminal Survey",
-      status: "draft" as const,
-      measurements: 5,
-      lastUpdated: "3 days ago",
-    },
-    {
-      id: "4",
-      name: "West Loading Area",
-      status: "completed" as const,
-      measurements: 55,
-      lastUpdated: "1 week ago",
-      volume: 2134.5,
-      weight: 2774.85,
-    },
-    {
-      id: "5",
-      name: "Central Hub Analysis",
-      status: "processing" as const,
-      measurements: 28,
-      lastUpdated: "2 days ago",
-      volume: 756.2,
-      weight: 983.06,
-    },
-    {
-      id: "6",
-      name: "Backup Storage Evaluation",
-      status: "draft" as const,
-      measurements: 12,
-      lastUpdated: "5 days ago",
-    },
-  ];
+  const { data: projects, isLoading } = useQuery({
+    queryKey: ["/api/projects"],
+    queryFn: getProjects,
+  });
 
-  const filteredProjects = allProjects.filter((project) =>
+  const createMutation = useMutation({
+    mutationFn: createProject,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Project created",
+        description: "Your new project has been created successfully.",
+      });
+      setShowCreateDialog(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create project. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const filteredProjects = projects?.filter((project) =>
     project.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ) || [];
 
   return (
     <div className="space-y-6">
@@ -95,19 +71,31 @@ export default function Projects() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProjects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            {...project}
-            onClick={() => setLocation(`/measurement/${project.id}`)}
-          />
-        ))}
-      </div>
-
-      {filteredProjects.length === 0 && (
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-48 rounded-lg" />
+          ))}
+        </div>
+      ) : filteredProjects.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProjects.map((project) => {
+            const lastUpdated = new Date(project.updatedAt).toLocaleDateString();
+            return (
+              <ProjectCardWithStats
+                key={project.id}
+                project={project}
+                lastUpdated={lastUpdated}
+                onClick={() => setLocation(`/measurement/${project.id}`)}
+              />
+            );
+          })}
+        </div>
+      ) : (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">No projects found matching your search.</p>
+          <p className="text-muted-foreground">
+            {searchQuery ? "No projects found matching your search." : "No projects yet"}
+          </p>
         </div>
       )}
 
@@ -115,9 +103,37 @@ export default function Projects() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onSubmit={(data) => {
-          console.log("New project created:", data);
+          createMutation.mutate({ name: data.name, status: "draft" });
         }}
       />
     </div>
+  );
+}
+
+function ProjectCardWithStats({
+  project,
+  lastUpdated,
+  onClick,
+}: {
+  project: any;
+  lastUpdated: string;
+  onClick: () => void;
+}) {
+  const { data: stats } = useQuery({
+    queryKey: ["/api/projects", project.id, "stats"],
+    queryFn: () => getProjectStats(project.id),
+  });
+
+  return (
+    <ProjectCard
+      id={project.id}
+      name={project.name}
+      status={project.status}
+      measurements={stats?.totalMeasurements || 0}
+      lastUpdated={lastUpdated}
+      volume={stats?.totalVolume}
+      weight={stats?.totalWeight}
+      onClick={onClick}
+    />
   );
 }

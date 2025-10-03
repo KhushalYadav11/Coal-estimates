@@ -1,43 +1,39 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MetricCard } from "@/components/MetricCard";
 import { ProjectCard } from "@/components/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, Scale, FileCheck, Target, Plus } from "lucide-react";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { useLocation } from "wouter";
+import { getProjects, getProjectStats, getTodayCount, getAnalyticsOverview } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  //todo: remove mock functionality - replace with real data
-  const recentProjects = [
-    {
-      id: "1",
-      name: "South Stockpile Assessment",
-      status: "completed" as const,
-      measurements: 48,
-      lastUpdated: "2 hours ago",
-      volume: 1245.8,
-      weight: 1619.54,
-    },
-    {
-      id: "2",
-      name: "North Yard Inventory",
-      status: "processing" as const,
-      measurements: 32,
-      lastUpdated: "1 day ago",
-      volume: 892.3,
-      weight: 1160,
-    },
-    {
-      id: "3",
-      name: "East Terminal Survey",
-      status: "draft" as const,
-      measurements: 5,
-      lastUpdated: "3 days ago",
-    },
-  ];
+  const { data: projects, isLoading: projectsLoading } = useQuery({
+    queryKey: ["/api/projects"],
+    queryFn: getProjects,
+  });
+
+  const { data: todayData } = useQuery({
+    queryKey: ["/api/analytics/today"],
+    queryFn: getTodayCount,
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["/api/analytics/overview"],
+    queryFn: getAnalyticsOverview,
+  });
+
+  const recentProjects = projects?.slice(0, 3) || [];
+  const todayCount = todayData?.count || 0;
+  const qualityRate = analytics
+    ? ((analytics.qualityCount.excellent || 0) + (analytics.qualityCount.good || 0)) /
+      Math.max(analytics.totalMeasurements, 1) * 100
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -57,43 +53,61 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
           title="Today's Measurements"
-          value="48"
+          value={todayCount}
           subtitle="of 60 daily target"
           icon={TrendingUp}
-          trend={{ value: 12, isPositive: true }}
         />
         <MetricCard
           title="Total Volume"
-          value="1,245.8 m³"
+          value={analytics ? `${analytics.totalVolume.toFixed(1)} m³` : "0 m³"}
           subtitle="Active projects"
           icon={Scale}
         />
         <MetricCard
           title="Estimated Weight"
-          value="1,619.5 MT"
+          value={analytics ? `${analytics.totalWeight.toFixed(1)} MT` : "0 MT"}
           subtitle="Total inventory"
           icon={Scale}
         />
         <MetricCard
           title="Quality Rate"
-          value="92%"
+          value={`${Math.round(qualityRate)}%`}
           subtitle="Excellent/Good"
           icon={FileCheck}
-          trend={{ value: 5, isPositive: true }}
         />
       </div>
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Recent Projects</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {recentProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              {...project}
-              onClick={() => setLocation(`/measurement/${project.id}`)}
-            />
-          ))}
-        </div>
+        {projectsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-48 rounded-lg" />
+            ))}
+          </div>
+        ) : recentProjects.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recentProjects.map((project) => {
+              const lastUpdated = new Date(project.updatedAt).toLocaleDateString();
+              return (
+                <ProjectCardWithStats
+                  key={project.id}
+                  project={project}
+                  lastUpdated={lastUpdated}
+                  onClick={() => setLocation(`/measurement/${project.id}`)}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-12 border rounded-lg">
+            <p className="text-muted-foreground mb-4">No projects yet</p>
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Your First Project
+            </Button>
+          </div>
+        )}
       </div>
 
       <CreateProjectDialog
@@ -105,5 +119,33 @@ export default function Dashboard() {
         }}
       />
     </div>
+  );
+}
+
+function ProjectCardWithStats({
+  project,
+  lastUpdated,
+  onClick,
+}: {
+  project: any;
+  lastUpdated: string;
+  onClick: () => void;
+}) {
+  const { data: stats } = useQuery({
+    queryKey: ["/api/projects", project.id, "stats"],
+    queryFn: () => getProjectStats(project.id),
+  });
+
+  return (
+    <ProjectCard
+      id={project.id}
+      name={project.name}
+      status={project.status}
+      measurements={stats?.totalMeasurements || 0}
+      lastUpdated={lastUpdated}
+      volume={stats?.totalVolume}
+      weight={stats?.totalWeight}
+      onClick={onClick}
+    />
   );
 }

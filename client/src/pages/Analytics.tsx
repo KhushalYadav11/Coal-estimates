@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { MetricCard } from "@/components/MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QualityBadge } from "@/components/QualityBadge";
+import { COAL_TYPES } from "@/components/CoalTypeSelector";
 import {
   TrendingUp,
   Scale,
@@ -9,24 +11,65 @@ import {
   BarChart3,
   PieChart,
 } from "lucide-react";
+import { getTodayCount, getAnalyticsOverview } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Analytics() {
-  //todo: remove mock functionality - replace with real chart data
-  const hourlyActivity = [8, 12, 15, 18, 22, 19, 16, 14];
-  const maxActivity = Math.max(...hourlyActivity);
+  const { data: todayData } = useQuery({
+    queryKey: ["/api/analytics/today"],
+    queryFn: getTodayCount,
+  });
 
-  const coalDistribution = [
-    { type: "Bituminous", count: 28, color: "bg-chart-1" },
-    { type: "Anthracite", count: 12, color: "bg-chart-2" },
-    { type: "Sub-bituminous", count: 8, color: "bg-chart-3" },
-  ];
+  const { data: analytics, isLoading } = useQuery({
+    queryKey: ["/api/analytics/overview"],
+    queryFn: getAnalyticsOverview,
+  });
 
-  const qualityMetrics = [
-    { rating: "excellent" as const, count: 24, percentage: 50 },
-    { rating: "good" as const, count: 20, percentage: 42 },
-    { rating: "fair" as const, count: 3, percentage: 6 },
-    { rating: "poor" as const, count: 1, percentage: 2 },
-  ];
+  const todayCount = todayData?.count || 0;
+
+  const coalDistribution = analytics
+    ? Object.entries(analytics.coalTypeCount).map(([type, count]) => {
+        const coalData = COAL_TYPES.find((c) => c.id === type);
+        return {
+          type: coalData?.name || type,
+          count: count as number,
+          color: "bg-chart-1",
+        };
+      })
+    : [];
+
+  const qualityMetrics = analytics
+    ? [
+        {
+          rating: "excellent" as const,
+          count: analytics.qualityCount.excellent || 0,
+          percentage: Math.round(
+            ((analytics.qualityCount.excellent || 0) / Math.max(analytics.totalMeasurements, 1)) * 100
+          ),
+        },
+        {
+          rating: "good" as const,
+          count: analytics.qualityCount.good || 0,
+          percentage: Math.round(
+            ((analytics.qualityCount.good || 0) / Math.max(analytics.totalMeasurements, 1)) * 100
+          ),
+        },
+        {
+          rating: "fair" as const,
+          count: analytics.qualityCount.fair || 0,
+          percentage: Math.round(
+            ((analytics.qualityCount.fair || 0) / Math.max(analytics.totalMeasurements, 1)) * 100
+          ),
+        },
+        {
+          rating: "poor" as const,
+          count: analytics.qualityCount.poor || 0,
+          percentage: Math.round(
+            ((analytics.qualityCount.poor || 0) / Math.max(analytics.totalMeasurements, 1)) * 100
+          ),
+        },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -39,114 +82,100 @@ export default function Analytics() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
-          title="Total Measurements"
-          value="48"
-          subtitle="Today"
+          title="Today's Measurements"
+          value={todayCount}
+          subtitle="Current session"
           icon={TrendingUp}
-          trend={{ value: 12, isPositive: true }}
         />
         <MetricCard
           title="Total Volume"
-          value="3,138 m³"
+          value={analytics ? `${analytics.totalVolume.toFixed(1)} m³` : "0 m³"}
           subtitle="All projects"
           icon={Scale}
         />
         <MetricCard
-          title="Quality Rate"
-          value="92%"
-          subtitle="Excellent/Good"
-          icon={FileCheck}
-          trend={{ value: 5, isPositive: true }}
+          title="Total Weight"
+          value={analytics ? `${analytics.totalWeight.toFixed(1)} MT` : "0 MT"}
+          subtitle="Estimated inventory"
+          icon={Scale}
         />
         <MetricCard
-          title="Avg Time"
-          value="2.5 min"
-          subtitle="Per measurement"
-          icon={Clock}
+          title="Total Measurements"
+          value={analytics?.totalMeasurements || 0}
+          subtitle="All time"
+          icon={FileCheck}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Hourly Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {hourlyActivity.map((count, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <div className="text-sm font-mono text-muted-foreground w-16">
-                    {9 + index}:00
+      {isLoading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="h-5 w-5" />
+                  Coal Type Distribution
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {coalDistribution.length > 0 ? (
+                  <div className="space-y-4">
+                    {coalDistribution.map((item, index) => (
+                      <div key={item.type}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">{item.type}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {item.count} measurements
+                          </span>
+                        </div>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full bg-chart-${(index % 5) + 1}`}
+                            style={{
+                              width: `${(item.count / analytics!.totalMeasurements) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex-1 h-8 bg-muted rounded-md overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${(count / maxActivity) * 100}%` }}
-                    />
-                  </div>
-                  <div className="text-sm font-semibold w-8 text-right">
-                    {count}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No measurements yet
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChart className="h-5 w-5" />
-              Coal Type Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {coalDistribution.map((item) => (
-                <div key={item.type}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">{item.type}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {item.count} measurements
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <Card>
+              <CardHeader>
+                <CardTitle>Quality Assessment Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  {qualityMetrics.map((metric) => (
                     <div
-                      className={`h-full ${item.color}`}
-                      style={{ width: `${(item.count / 48) * 100}%` }}
-                    />
-                  </div>
+                      key={metric.rating}
+                      className="rounded-lg border p-4 space-y-2"
+                    >
+                      <QualityBadge rating={metric.rating} />
+                      <div className="text-3xl font-bold">{metric.count}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {metric.percentage}% of total
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Quality Assessment Distribution</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {qualityMetrics.map((metric) => (
-              <div
-                key={metric.rating}
-                className="rounded-lg border p-4 space-y-2"
-              >
-                <QualityBadge rating={metric.rating} />
-                <div className="text-3xl font-bold">{metric.count}</div>
-                <div className="text-sm text-muted-foreground">
-                  {metric.percentage}% of total
-                </div>
-              </div>
-            ))}
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </>
+      )}
     </div>
   );
 }

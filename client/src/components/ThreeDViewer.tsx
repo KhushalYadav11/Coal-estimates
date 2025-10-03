@@ -27,24 +27,25 @@ export function ThreeDViewer({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0a);
-    
-    const camera = new THREE.PerspectiveCamera(
-      75,
-      containerRef.current.clientWidth / containerRef.current.clientHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(5, 5, 8);
-    camera.lookAt(0, 0, 0);
+    try {
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0a0a);
+      
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        containerRef.current.clientWidth / containerRef.current.clientHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(5, 5, 8);
+      camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(
-      containerRef.current.clientWidth,
-      containerRef.current.clientHeight
-    );
-    containerRef.current.appendChild(renderer.domElement);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(
+        containerRef.current.clientWidth,
+        containerRef.current.clientHeight
+      );
+      containerRef.current.appendChild(renderer.domElement);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
@@ -93,26 +94,30 @@ export function ThreeDViewer({
     };
     animate();
 
-    const handleResize = () => {
-      if (!containerRef.current) return;
-      camera.aspect =
-        containerRef.current.clientWidth / containerRef.current.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(
-        containerRef.current.clientWidth,
-        containerRef.current.clientHeight
-      );
-    };
-    window.addEventListener("resize", handleResize);
+      const handleResize = () => {
+        if (!containerRef.current) return;
+        camera.aspect =
+          containerRef.current.clientWidth / containerRef.current.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(
+          containerRef.current.clientWidth,
+          containerRef.current.clientHeight
+        );
+      };
+      window.addEventListener("resize", handleResize);
 
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      if (sceneRef.current.animationId) {
-        cancelAnimationFrame(sceneRef.current.animationId);
-      }
-      renderer.dispose();
-      containerRef.current?.removeChild(renderer.domElement);
-    };
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        if (sceneRef.current.animationId) {
+          cancelAnimationFrame(sceneRef.current.animationId);
+        }
+        renderer.dispose();
+        containerRef.current?.removeChild(renderer.domElement);
+      };
+    } catch (error) {
+      console.warn("WebGL not available:", error);
+      return;
+    }
   }, [modelLoaded, measurementMode, isRotating]);
 
   return (
