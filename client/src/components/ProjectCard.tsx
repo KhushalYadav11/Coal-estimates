@@ -1,0 +1,101 @@
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Folder, Calendar, TrendingUp, MoreVertical } from "lucide-react";
+
+interface ProjectCardProps {
+  id: string;
+  name: string;
+  status: "draft" | "processing" | "completed";
+  measurements: number;
+  lastUpdated: string;
+  volume?: number;
+  weight?: number;
+  onClick?: () => void;
+}
+
+const statusConfig = {
+  draft: { label: "Draft", className: "bg-muted text-muted-foreground" },
+  processing: { label: "Processing", className: "bg-chart-3/20 text-chart-3" },
+  completed: { label: "Completed", className: "bg-chart-2/20 text-chart-2" },
+};
+
+export function ProjectCard({
+  name,
+  status,
+  measurements,
+  lastUpdated,
+  volume,
+  weight,
+  onClick,
+}: ProjectCardProps) {
+  return (
+    <Card
+      className="hover-elevate active-elevate-2 cursor-pointer"
+      onClick={onClick}
+      data-testid={`card-project-${name.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Folder className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate" data-testid="text-project-name">
+              {name}
+            </h3>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log("Project menu clicked");
+          }}
+          data-testid="button-project-menu"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <Badge
+            className={statusConfig[status].className}
+            data-testid="badge-project-status"
+          >
+            {statusConfig[status].label}
+          </Badge>
+          <div className="text-sm text-muted-foreground flex items-center gap-1">
+            <TrendingUp className="h-3 w-3" />
+            <span data-testid="text-measurement-count">{measurements} measurements</span>
+          </div>
+        </div>
+        
+        {volume && weight && (
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+            <div>
+              <div className="text-xs text-muted-foreground">Volume</div>
+              <div className="font-mono font-semibold" data-testid="text-project-volume">
+                {volume.toFixed(2)} m³
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Weight</div>
+              <div className="font-mono font-semibold" data-testid="text-project-weight">
+                {weight.toFixed(2)} MT
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="pt-3 border-t">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Calendar className="h-3 w-3" />
+          <span data-testid="text-last-updated">Updated {lastUpdated}</span>
+        </div>
+      </CardFooter>
+    </Card>
+  );
+}
