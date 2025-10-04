@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+celery
+redis
+psycopg2-binary
+sqlalchemy
+alembic
+python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+pydantic
+trimesh
+opencv-python
+reportlab
+pandas
+python-multipart
+requests
