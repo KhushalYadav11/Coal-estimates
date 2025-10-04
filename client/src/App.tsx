@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useState } from "react";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
@@ -38,35 +39,39 @@ export default function App() {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark">
-        <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar onNewProject={() => setShowCreateDialog(true)} />
-              <div className="flex flex-col flex-1 min-w-0">
-                <header className="flex items-center justify-between p-4 border-b gap-4">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <div className="flex items-center gap-2">
-                    <ThemeToggle />
-                  </div>
-                </header>
-                <main className="flex-1 overflow-auto p-6">
-                  <Router />
-                </main>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider defaultTheme="dark">
+          <TooltipProvider>
+            <SidebarProvider style={style as React.CSSProperties}>
+              <div className="flex h-screen w-full">
+                <AppSidebar onNewProject={() => setShowCreateDialog(true)} />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <header className="flex items-center justify-between p-4 border-b gap-4">
+                    <SidebarTrigger data-testid="button-sidebar-toggle" />
+                    <div className="flex items-center gap-2">
+                      <ThemeToggle />
+                    </div>
+                  </header>
+                  <main className="flex-1 overflow-auto p-6">
+                    <ErrorBoundary>
+                      <Router />
+                    </ErrorBoundary>
+                  </main>
+                </div>
               </div>
-            </div>
-          </SidebarProvider>
-          <CreateProjectDialog
-            open={showCreateDialog}
-            onOpenChange={setShowCreateDialog}
-            onSubmit={(data) => {
-              console.log("New project created:", data);
-            }}
-          />
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+            </SidebarProvider>
+            <CreateProjectDialog
+              open={showCreateDialog}
+              onOpenChange={setShowCreateDialog}
+              onSubmit={(data) => {
+                console.log("New project created:", data);
+              }}
+            />
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

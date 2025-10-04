@@ -8,11 +8,14 @@ import trimesh
 @celery_app.task
 def run_meshroom_job(job_id: int, input_path: str):
     db = SessionLocal()
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        db.close()
-        return
     try:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return {"error": "Job not found"}
+        
+        # Update job status to processing
+        job.status = "processing"
+        db.commit()
         # Prepare output dir
         output_dir = os.path.join("/tmp/coal_results", f"job_{job_id}")
         os.makedirs(output_dir, exist_ok=True)
@@ -30,29 +33,44 @@ def run_meshroom_job(job_id: int, input_path: str):
                         break
         if not os.path.exists(obj_path):
             job.status = "failed"
+            job.model_path = None
             db.commit()
-            db.close()
-            return
+            return {"error": "No 3D model generated"}
+        
         # Update job with model path
         job.model_path = obj_path
         job.status = "reconstructed"
         db.commit()
+        
         # Trigger volume calculation
         compute_volume.delay(job_id, obj_path)
+        return {"status": "success", "model_path": obj_path}
+        
+    except subprocess.CalledProcessError as e:
+        job.status = "failed"
+        job.model_path = None
+        db.commit()
+        return {"error": f"Meshroom processing failed: {str(e)}"}
     except Exception as e:
         job.status = "failed"
+        job.model_path = None
         db.commit()
+        return {"error": f"Unexpected error: {str(e)}"}
     finally:
         db.close()
 
 @celery_app.task
 def compute_volume(job_id: int, obj_path: str):
     db = SessionLocal()
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        db.close()
-        return
     try:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return {"error": "Job not found"}
+        
+        if not os.path.exists(obj_path):
+            job.status = "failed"
+            db.commit()
+            return {"error": "Model file not found"}
         # Use Trimesh for volume calculation
         mesh = trimesh.load(obj_path)
         volume = mesh.volume
@@ -67,8 +85,11 @@ def compute_volume(job_id: int, obj_path: str):
         job.weight = weight
         job.status = "complete"
         db.commit()
+        return {"status": "success", "volume": volume, "weight": weight}
+        
     except Exception as e:
         job.status = "failed"
         db.commit()
+        return {"error": f"Volume calculation failed: {str(e)}"}
     finally:
         db.close()

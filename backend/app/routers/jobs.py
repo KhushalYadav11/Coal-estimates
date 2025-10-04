@@ -17,13 +17,37 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def submit_job(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    user_id: int = 1  # TODO: Replace with real user auth
+    # TODO: Implement proper authentication middleware
+    # user_id: int = Depends(get_current_user_id)
 ):
+    # Temporary: Use a default user_id until auth is implemented
+    user_id = 1
+    # Validate file type and size
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    # Check file extension
+    allowed_extensions = {'.zip', '.mp4', '.avi', '.mov', '.jpg', '.jpeg', '.png'}
+    file_ext = os.path.splitext(file.filename.lower())[1]
+    if file_ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: zip, mp4, avi, mov, jpg, jpeg, png")
+    
+    # Check file size (max 100MB)
+    file.file.seek(0, 2)  # Seek to end
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset to beginning
+    if file_size > 100 * 1024 * 1024:  # 100MB
+        raise HTTPException(status_code=400, detail="File too large. Maximum size: 100MB")
+    
     # Save uploaded file (image zip or video)
     job_uuid = str(uuid.uuid4())
     user_dir = os.path.join(UPLOAD_DIR, f"user_{user_id}")
     os.makedirs(user_dir, exist_ok=True)
-    file_path = os.path.join(user_dir, f"{job_uuid}_{file.filename}")
+    
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(user_dir, f"{job_uuid}_{safe_filename}")
+    
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 

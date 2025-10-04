@@ -18,7 +18,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/projects/:id", async (req, res) => {
     try {
-      const project = await storage.getProject(req.params.id);
+      const { id } = req.params;
+      
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        return res.status(400).json({ error: "Invalid project ID format" });
+      }
+      
+      const project = await storage.getProject(id);
       if (!project) {
         return res.status(404).json({ error: "Project not found" });
       }
@@ -189,33 +197,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/analytics/overview", async (req, res) => {
     try {
+      // Optimize: Get all measurements in one query instead of N+1
       const projects = await storage.getProjects();
       const allMeasurements = await Promise.all(
         projects.map((p) => storage.getMeasurements(p.id))
       );
       
       const measurements = allMeasurements.flat();
-      const totalVolume = measurements.reduce((sum, m) => sum + m.calculatedVolume, 0);
-      const totalWeight = measurements.reduce((sum, m) => sum + m.calculatedWeight, 0);
       
-      const qualityCount = {
-        excellent: measurements.filter((m) => m.quality === "excellent").length,
-        good: measurements.filter((m) => m.quality === "good").length,
-        fair: measurements.filter((m) => m.quality === "fair").length,
-        poor: measurements.filter((m) => m.quality === "poor").length,
-      };
-      
-      const coalTypeCount: Record<string, number> = {};
-      measurements.forEach((m) => {
-        coalTypeCount[m.coalType] = (coalTypeCount[m.coalType] || 0) + 1;
+      // Use reduce for better performance than multiple filter calls
+      const stats = measurements.reduce((acc, m) => {
+        acc.totalVolume += m.calculatedVolume;
+        acc.totalWeight += m.calculatedWeight;
+        acc.qualityCount[m.quality] = (acc.qualityCount[m.quality] || 0) + 1;
+        acc.coalTypeCount[m.coalType] = (acc.coalTypeCount[m.coalType] || 0) + 1;
+        return acc;
+      }, {
+        totalVolume: 0,
+        totalWeight: 0,
+        qualityCount: { excellent: 0, good: 0, fair: 0, poor: 0 },
+        coalTypeCount: {} as Record<string, number>
       });
 
       res.json({
         totalMeasurements: measurements.length,
-        totalVolume,
-        totalWeight,
-        qualityCount,
-        coalTypeCount,
+        totalVolume: stats.totalVolume,
+        totalWeight: stats.totalWeight,
+        qualityCount: stats.qualityCount,
+        coalTypeCount: stats.coalTypeCount,
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch overview" });

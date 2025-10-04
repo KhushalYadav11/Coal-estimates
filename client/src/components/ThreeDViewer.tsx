@@ -27,11 +27,16 @@ export function ThreeDViewer({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    let animationId: number;
+    let renderer: THREE.WebGLRenderer;
+    let scene: THREE.Scene;
+    let camera: THREE.PerspectiveCamera;
+
     try {
-      const scene = new THREE.Scene();
+      scene = new THREE.Scene();
       scene.background = new THREE.Color(0x0a0a0a);
       
-      const camera = new THREE.PerspectiveCamera(
+      camera = new THREE.PerspectiveCamera(
         75,
         containerRef.current.clientWidth / containerRef.current.clientHeight,
         0.1,
@@ -40,7 +45,7 @@ export function ThreeDViewer({
       camera.position.set(5, 5, 8);
       camera.lookAt(0, 0, 0);
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(
         containerRef.current.clientWidth,
         containerRef.current.clientHeight
@@ -90,30 +95,46 @@ export function ThreeDViewer({
         sceneRef.current.mesh.rotation.y += 0.005;
       }
       renderer.render(scene, camera);
-      sceneRef.current.animationId = requestAnimationFrame(animate);
+      animationId = requestAnimationFrame(animate);
     };
     animate();
 
-      const handleResize = () => {
-        if (!containerRef.current) return;
-        camera.aspect =
-          containerRef.current.clientWidth / containerRef.current.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(
-          containerRef.current.clientWidth,
-          containerRef.current.clientHeight
-        );
-      };
-      window.addEventListener("resize", handleResize);
+    const handleResize = () => {
+      if (!containerRef.current) return;
+      camera.aspect =
+        containerRef.current.clientWidth / containerRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(
+        containerRef.current.clientWidth,
+        containerRef.current.clientHeight
+      );
+    };
+    window.addEventListener("resize", handleResize);
 
-      return () => {
-        window.removeEventListener("resize", handleResize);
-        if (sceneRef.current.animationId) {
-          cancelAnimationFrame(sceneRef.current.animationId);
-        }
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      // Properly dispose of Three.js resources
+      if (renderer) {
         renderer.dispose();
-        containerRef.current?.removeChild(renderer.domElement);
-      };
+        if (containerRef.current && renderer.domElement) {
+          containerRef.current.removeChild(renderer.domElement);
+        }
+      }
+      // Dispose of geometries and materials
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry.dispose();
+          if (Array.isArray(object.material)) {
+            object.material.forEach(material => material.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      });
+    };
     } catch (error) {
       console.warn("WebGL not available:", error);
       return;
